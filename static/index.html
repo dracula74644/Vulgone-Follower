@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vulgone Follower</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f1f3f6; --border: #e3e6eb;
+    --text: #1b1f24; --muted: #667085; --accent: #2f6fed; --accent-soft: #e7efff;
+    --warn: #b54708; --warn-soft: #fef0e1; --ok: #067647; --ok-soft: #e3f6ec;
+    --bad: #d92d20; --bad-soft: #fde8e6; --purple: #6941c6; --purple-soft: #efe9fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #161a20; --panel-2: #1d222a; --border: #2a303a;
+      --text: #e6e9ee; --muted: #98a2b3; --accent: #6b9bff; --accent-soft: #1d2a45;
+      --warn: #f79009; --warn-soft: #3a2a12; --ok: #47cd89; --ok-soft: #143325;
+      --bad: #f97066; --bad-soft: #3b1a1a; --purple: #b692f6; --purple-soft: #2a1f45;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: var(--accent); }
+  .app { display: grid; grid-template-columns: 220px 1fr; height: 100vh; transition: grid-template-columns .15s; }
+  .app.collapsed { grid-template-columns: 60px 1fr; }
+  .content { display: grid; grid-template-rows: auto auto 1fr; min-height: 0; min-width: 0; }
+
+  /* sidebar */
+  aside.side { display: flex; flex-direction: column; gap: 6px; padding: 12px 10px; background: var(--panel); border-right: 1px solid var(--border); overflow: hidden; }
+  .side-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 4px 6px; }
+  .side-top h1 { font-size: 15px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side-toggle { border: 1px solid var(--border); background: var(--panel); border-radius: 7px; width: 28px; height: 28px; cursor: pointer; color: var(--muted); flex: none; }
+  .side-toggle:hover { background: var(--panel-2); }
+  aside.side .tab { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 600; text-align: left; white-space: nowrap; }
+  aside.side .tab:hover { background: var(--panel-2); }
+  aside.side .tab.active { background: var(--accent-soft); color: var(--accent); }
+  aside.side .tab .ico { width: 20px; text-align: center; flex: none; font-size: 15px; }
+  aside.side .tab .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  aside.side .tab b { font-weight: 600; color: var(--muted); font-size: 12px; }
+  aside.side .grow { flex: 1; }
+  .mode-row { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; }
+  .collapsed aside.side .lbl, .collapsed aside.side .tab b, .collapsed aside.side h1, .collapsed #playLabel, .collapsed .mode-row .mode { display: none; }
+  .collapsed aside.side { padding-left: 8px; padding-right: 8px; }
+  .collapsed aside.side .tab { justify-content: center; padding: 8px 0; }
+  .collapsed .side-top { justify-content: center; }
+  .collapsed .play { justify-content: center; padding: 8px 0; }
+  .collapsed .mode-row { justify-content: center; }
+  .mode-dot { width: 10px; height: 10px; border-radius: 50%; display: none; }
+  .collapsed .mode-dot { display: inline-block; }
+  .mode-dot.dry { background: var(--purple); } .mode-dot.live { background: var(--bad); }
+
+  /* header */
+  header.top { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .play { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-weight: 650; white-space: nowrap; overflow: hidden; }
+  .play.running { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .play.paused { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .play .ico { font-size: 15px; }
+  .mode { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 9px; border-radius: 999px; }
+  .mode.dry { background: var(--purple-soft); color: var(--purple); }
+  .mode.live { background: var(--bad-soft); color: var(--bad); }
+  .statusline { color: var(--muted); font-size: 13px; flex: 1; min-width: 200px; }
+  .statusline b { color: var(--text); font-weight: 600; }
+  .statusline .err { color: var(--bad); }
+  .btn { padding: 7px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--panel-2); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  /* tiles */
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; padding: 12px 16px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  .tile:hover { border-color: var(--accent); }
+  .tile .n { font-size: 22px; font-weight: 700; line-height: 1.1; }
+  .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .tile.warn .n { color: var(--warn); }
+  .tile.ok .n { color: var(--ok); }
+
+  /* tabs */
+
+  /* main split */
+  .main { display: grid; grid-template-columns: minmax(380px, 520px) 1fr; min-height: 0; }
+  section.list { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+  .list-head { padding: 10px 14px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+  .list-head .sub { color: var(--muted); font-size: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); cursor: pointer; user-select: none; }
+  .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .chip b { font-weight: 600; }
+  .toolbar { display: flex; gap: 6px; align-items: center; }
+  .toolbar select, .toolbar input { flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-2); font-size: 12px; }
+  .items { overflow-y: auto; flex: 1; }
+  .item { display: grid; grid-template-columns: 10px 1fr auto; gap: 4px 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .item:hover { background: var(--panel-2); }
+  .item.active { background: var(--accent-soft); }
+  .item .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--border); }
+  .item .dot.warn { background: var(--warn); } .item .dot.ok { background: var(--ok); } .item .dot.bad { background: var(--bad); } .item .dot.purple { background: var(--purple); } .item .dot.accent { background: var(--accent); }
+  .item .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .item .when { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .item .subj { grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .subj .addr { color: var(--muted); }
+  .item .meta { grid-column: 2 / 4; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .tag.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .tag.info { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .tag.purple { background: var(--purple-soft); color: var(--purple); border-color: transparent; }
+  .more { padding: 14px; text-align: center; }
+  .empty, .loading, .error { padding: 40px 20px; text-align: center; color: var(--muted); }
+  .error { color: var(--bad); }
+  .section-title { padding: 10px 14px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--panel-2); border-bottom: 1px solid var(--border); }
+
+  /* reader */
+  section.reader { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); overflow-y: auto; }
+  .reader-empty { margin: auto; color: var(--muted); }
+  .r-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
+  .r-head h2 { font-size: 19px; margin: 0 0 8px; overflow-wrap: anywhere; }
+  .r-meta { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; margin: 0; }
+  .r-meta dt { color: var(--muted); }
+  .r-meta dd { margin: 0; overflow-wrap: anywhere; }
+  .r-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .r-actions .btn { padding: 4px 10px; font-size: 12px; text-decoration: none; }
+  .timeline { display: flex; gap: 4px; align-items: center; margin-top: 10px; }
+  .timeline .step { height: 6px; flex: 1; border-radius: 3px; background: var(--border); }
+  .timeline .step.done { background: var(--accent); } .timeline .step.ok { background: var(--ok); } .timeline .step.bad { background: var(--bad); }
+  .timeline .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .thread { padding: 12px 20px 40px; display: grid; gap: 10px; }
+  .tmsg { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .tmsg.in { border-left: 3px solid var(--ok); } .tmsg.out { border-left: 3px solid var(--accent); }
+  .tmsg.auto { border-left-color: var(--purple); opacity: .85; } .tmsg.bounce { border-left-color: var(--bad); }
+  .thead { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; }
+  .thead:hover { background: var(--panel-2); }
+  .thead .arrow { font-weight: 700; width: 18px; text-align: center; }
+  .tmsg.in .arrow { color: var(--ok); } .tmsg.out .arrow { color: var(--accent); }
+  .thead .tw { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thead .tw small { color: var(--muted); }
+  .thead .td { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .tbody { border-top: 1px solid var(--border); }
+  .tbody pre { padding: 14px; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tbody iframe { width: 100%; height: 420px; border: 0; background: #fff; display: block; }
+  .tbody .tfoot { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--panel-2); }
+  .tbody .tfoot .btn { padding: 3px 9px; font-size: 12px; text-decoration: none; }
+
+  /* forms */
+  .card { margin: 12px 20px; border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--panel); }
+  .card h3 { margin: 0 0 10px; font-size: 14px; }
+  .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .form label, .form-col label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+  .form input, .form select, .form textarea, .form-col input, .form-col select, .form-col textarea { padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-2); width: 100%; min-width: 0; }
+  .form .wide { grid-column: 1 / -1; }
+  .form-col { display: grid; gap: 10px; }
+  textarea { min-height: 120px; resize: vertical; font-family: inherit; line-height: 1.45; }
+  .check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+  .check input { width: auto; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .reply-card { padding: 12px 14px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+  .reply-card .who { font-weight: 600; }
+  .reply-card .msg { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+  .reply-card textarea { min-height: 150px; width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+  .money { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .money b { color: var(--text); }
+  .log .item { grid-template-columns: 90px 1fr auto; }
+  .log .ev { font-size: 11px; color: var(--muted); }
+  .log .lvl-error .ev { color: var(--bad); } .log .lvl-warn .ev { color: var(--warn); }
+  .log .item .subj { grid-column: auto; }
+  .muted { color: var(--muted); }
+  .back { display: none; }
+
+  @media (max-width: 900px) {
+    .app, .app.collapsed { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    aside.side { flex-direction: row; align-items: center; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); padding: 8px 10px; }
+    aside.side .tab { width: auto; } aside.side .grow { display: none; } .play { width: auto; } .side-toggle { display: none; }
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .main { grid-template-columns: 1fr; }
+    section.reader { display: none; }
+    body.reading section.reader { display: flex; position: fixed; inset: 0; z-index: 10; }
+    .back { display: inline-block; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="side" id="tabs">
+    <div class="side-top"><h1>Vulgone Follower</h1><button class="side-toggle" id="sideToggle" title="Collapse sidebar">«</button></div>
+    <button class="play" id="play" title="Pause / resume the automation"><span class="ico">▶</span><span id="playLabel">…</span></button>
+    <div class="mode-row"><span class="mode dry" id="mode">DRY RUN</span><span class="mode-dot dry" id="modeDot"></span></div>
+    <button class="tab" data-tab="queue" title="Queue"><span class="ico">⏳</span><span class="lbl">Queue</span><b id="nQueue"></b></button>
+    <button class="tab" data-tab="replies" title="Replies"><span class="ico">↩</span><span class="lbl">Replies</span><b id="nReplies"></b></button>
+    <button class="tab" data-tab="pipeline" title="Pipeline"><span class="ico">◧</span><span class="lbl">Pipeline</span><b id="nPipeline"></b></button>
+    <button class="tab" data-tab="sequence" title="Sequence"><span class="ico">➤</span><span class="lbl">Sequence</span></button>
+    <button class="tab" data-tab="activity" title="Activity"><span class="ico">≡</span><span class="lbl">Activity</span></button>
+    <button class="tab" data-tab="settings" title="Settings"><span class="ico">⚙</span><span class="lbl">Settings</span></button>
+    <span class="grow"></span>
+    <button class="tab" data-tab="mail" title="Mail"><span class="ico">✉</span><span class="lbl">Mail</span></button>
+  </aside>
+
+  <div class="content">
+  <header class="top">
+    <div class="statusline" id="statusline">connecting…</div>
+    <button class="btn" id="refresh" title="Refresh now">⟳</button>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="main">
+    <section class="list">
+      <div class="list-head" id="listHead"></div>
+      <div class="items" id="items"></div>
+    </section>
+    <section class="reader" id="reader">
+      <div class="reader-empty">Select a client to see the conversation.</div>
+    </section>
+  </div>
+  </div>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtN = n => (n || 0).toLocaleString();
+const fmtTs = ts => { if (!ts) return ''; const d = new Date(ts * 1000), now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(); };
+const fmtDate = iso => fmtTs(new Date(iso).getTime() / 1000);
+const ago = ts => { const h = Math.floor((Date.now() / 1000 - ts) / 3600); if (h < 1) return '<1h'; if (h < 24) return `${h}h`; const d = Math.floor(h / 24); return d === 1 ? '1 day' : `${d} days`; };
+const agoShort = ts => { const s = Math.max(0, Math.round(Date.now() / 1000 - ts)); return s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : ago(ts); };
+
+async function api(path, params = {}, opts = {}) {
+  const url = new URL(path, location.origin);
+  for (const [k, v] of Object.entries(params)) if (v !== '' && v != null && v !== false) url.searchParams.set(k, v === true ? '1' : v);
+  const r = await fetch(url, opts.method ? { method: opts.method, headers: { 'Content-Type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined } : undefined);
+  const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+const post = (path, body) => api(path, {}, { method: 'POST', body });
+const put = (path, body) => api(path, {}, { method: 'PUT', body });
+
+const SEQ_STAGES = {
+  sent: { label: 'No reply to initial email', sub: 'got the initial email only, never replied' },
+  followup1: { label: 'No reply after 1st follow-up', sub: 'got the 1st follow-up, still no reply' },
+  followup2: { label: 'No reply after 2nd follow-up', sub: 'got the 2nd follow-up, still no reply (dropped)' },
+  replied: { label: 'Replied', sub: 'replied at some point' },
+  bounced: { label: 'Bounced', sub: 'undeliverable' },
+};
+const CAT_LABELS = { go_ahead: ['Send the report', 'ok'], program: ['Has a program', 'info'], no_bounty: ['No bounty', 'warn'], stop: ['Asked to stop', 'bad'],
+  forwarded: ['Rerouted', 'info'], question: ['Question', 'warn'], ack: ['Acknowledged', ''], offer: ['Reward offered', 'ok'], other: ['Needs review', 'warn'], bounce: ['Bounce', 'bad'] };
+const PIPE_COLORS = { answer: 'warn', sample: 'warn', sample_sent: 'accent', in_talks: 'ok', waiting: '', program: 'accent', confirm_stop: 'bad', closed: '', stopped: 'bad' };
+const TAG_OF = { ok: 'ok', bad: 'bad', warn: 'warn', purple: 'purple', accent: 'info', '': '' };
+
+const state = { tab: 'queue', status: null, stages: [], selected: null, items: [], seq: { stage: 'sent', sort: 'activity', q: '' }, pipe: { stage: '' }, mail: { folder: 'INBOX' } };
+
+// ------------------------------------------------------------ header / tiles
+async function loadStatus() {
+  try { const s = await api('/api/status'); state.status = s; renderHeader(s); }
+  catch (e) { $('#statusline').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+function renderHeader(s) {
+  const btn = $('#play');
+  btn.className = 'play ' + (s.paused ? 'paused' : 'running');
+  $('.ico', btn).textContent = s.paused ? '▶' : '⏸';
+  $('#playLabel').textContent = s.paused ? 'Paused — click to run' : 'Running — click to pause';
+  const mode = $('#mode'); mode.className = 'mode ' + (s.dry_run ? 'dry' : 'live'); mode.textContent = s.dry_run ? 'DRY RUN' : 'LIVE';
+  const dot = $('#modeDot'); dot.className = 'mode-dot ' + (s.dry_run ? 'dry' : 'live'); dot.title = mode.textContent;
+  const st = s.status || {};
+  const parts = [];
+  if (!s.running) parts.push('<span class="err">scheduler not running</span>');
+  if (st.error) parts.push(`<span class="err">${esc(st.error)}</span>`);
+  if (!s.backfilled) parts.push(`classifying history (${fmtN(st.backfill_remaining)} left)`);
+  if (st.researcher && st.researcher !== 'ok' && st.researcher !== 'off') parts.push(`<span class="err" title="${esc(st.researcher)}">researcher@ mailbox: ${esc(st.researcher.slice(0, 60))}</span>`);
+  if (s.paused) parts.push('automation paused');
+  else if (!s.window_open) parts.push(`outside sending window · opens ${s.next_window_start ? new Date(s.next_window_start * 1000).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}`);
+  else if (st.gate === 'daily cap reached') parts.push('daily cap reached');
+  else if (st.gate === 'backing off after error') parts.push('<span class="err">backing off after a send error</span>');
+  else if (st.next) parts.push(`next: <b>${esc(st.next.addr)}</b> (${st.next.step === 2 ? '1st' : '2nd'} follow-up)${st.retry_at ? ' at ' + new Date(st.retry_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`);
+  else parts.push('nothing due');
+  parts.push(`<b>${fmtN(st.sent_today)}</b>/${s.daily_cap} today`);
+  parts.push(`sync ${st.last_tick ? agoShort(st.last_tick) + ' ago' : '—'}`);
+  $('#statusline').innerHTML = parts.join(' · ');
+  const tiles = [
+    ['queue', st.queue, 'due now', st.queue ? 'warn' : ''],
+    ['activity', st.sent_today, s.dry_run ? 'would send today' : 'sent today', ''],
+    ['replies', s.replies_7d, 'replies last 7 days', ''],
+    ['replies', s.needs_reply, 'need your reply', s.needs_reply ? 'warn' : ''],
+    ['pipeline', s.stages?.sample?.n || 0, 'samples to send', s.stages?.sample?.n ? 'warn' : ''],
+  ];
+  $('#tiles').innerHTML = tiles.map(([tab, n, l, cls]) => `<div class="tile ${cls}" data-tab="${tab}"><div class="n">${typeof n === 'number' ? fmtN(n) : esc(n ?? '—')}</div><div class="l">${l}</div></div>`).join('');
+  $('#nQueue').textContent = st.queue ? fmtN(st.queue) : '';
+  const pending = (s.needs_reply || 0) + (s.confirm_stop || 0);
+  $('#nReplies').textContent = pending ? fmtN(pending) : '';
+  const total = Object.values(s.stages || {}).reduce((a, v) => a + v.n, 0);
+  $('#nPipeline').textContent = total ? fmtN(total) : '';
+}
+$('#play').onclick = async () => {
+  if (!state.status) return;
+  await post('/api/control', { action: state.status.paused ? 'resume' : 'pause' });
+  await loadStatus();
+};
+$('#refresh').onclick = async () => { await post('/api/control', { action: 'refresh' }).catch(() => {}); loadStatus(); loadTab(); };
+$('#tiles').addEventListener('click', e => { const t = e.target.closest('[data-tab]'); if (t) setTab(t.dataset.tab); });
+
+// ------------------------------------------------------------ tabs
+function setTab(tab) {
+  state.tab = tab; state.selected = null;
+  $$('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  history.replaceState(null, '', '#' + tab);
+  loadTab();
+}
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) setTab(b.dataset.tab); });
+// Collapsible sidebar; the choice is remembered per browser.
+function setSidebar(collapsed) {
+  $('#app').classList.toggle('collapsed', collapsed);
+  const t = $('#sideToggle'); t.textContent = collapsed ? '»' : '«'; t.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  try { localStorage.setItem('sidebar', collapsed ? 'collapsed' : 'open'); } catch (e) { /* storage may be unavailable */ }
+}
+$('#sideToggle').onclick = () => setSidebar(!$('#app').classList.contains('collapsed'));
+try { setSidebar(localStorage.getItem('sidebar') === 'collapsed'); } catch (e) { /* ignore */ }
+function loadTab() {
+  const loaders = { queue: loadQueue, replies: loadReplies, pipeline: loadPipeline, sequence: loadSequence, activity: loadActivity, settings: loadSettings, mail: loadMail };
+  $('#items').innerHTML = '<div class="loading">Loading…</div>';
+  (loaders[state.tab] || loadQueue)().catch(e => { $('#items').innerHTML = `<div class="error">${esc(e.message)}</div>`; });
+}
+function head(html) { $('#listHead').innerHTML = html; }
+
+// ------------------------------------------------------------ queue
+async function loadQueue() {
+  const d = await api('/api/queue', { limit: 300 });
+  state.items = d.items;
+  const sk = Object.entries(d.skipped || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${fmtN(v)} ${k}`).join(', ');
+  head(`<div><b>${fmtN(d.total)}</b> follow-ups due · one every ${state.status?.min_gap_seconds || 120} s inside the window, newest clients first</div>
+        <div class="sub">Not in the queue: ${esc(sk) || '—'}</div>`);
+  if (!d.items.length) { $('#items').innerHTML = '<div class="empty">Nothing is due right now.</div>'; return; }
+  const gap = state.status?.min_gap_seconds || 120;
+  $('#items').innerHTML = d.items.map((t, i) => `<div class="item" data-id="${esc(t.id)}">
+      <span class="dot ${t.step === 3 ? 'purple' : 'warn'}"></span>
+      <span class="who">${esc(t.name || t.addr)}</span><span class="when">#${i + 1} · ~${Math.round(i * gap / 60)} min</span>
+      <span class="subj">${t.name ? `<span class="addr">${esc(t.addr)} · </span>` : ''}${esc(t.subject)}</span>
+      <span class="meta"><span class="tag ${t.step === 3 ? 'purple' : 'warn'}">${t.step === 2 ? '1st' : '2nd (final)'} follow-up</span><span class="tag">${ago(t.last_out_ts)} silent</span><span class="tag">${t.sends} sent</span></span>
+    </div>`).join('') + (d.total > d.items.length ? `<div class="more muted">…and ${fmtN(d.total - d.items.length)} more</div>` : '');
+}
+
+// ------------------------------------------------------------ replies
+async function loadReplies() {
+  const d = await api('/api/replies');
+  state.items = d.items.map(x => x.thread).filter(Boolean);
+  head(`<div><b>${fmtN(d.total)}</b> replies waiting for you${d.confirm_stop.length ? ` · <b>${d.confirm_stop.length}</b> to confirm as do-not-contact` : ''}${(d.researcher || []).length ? ` · <b>${d.researcher.length}</b> on researcher@` : ''}${d.unmatched.length ? ` · ${d.unmatched.length} unmatched` : ''}</div>
+        <div class="toolbar"><button class="btn small" id="markOld">Mark replies older than 30 days handled</button></div>`);
+  $('#markOld').onclick = async () => { if (!confirm('Mark every reply older than 30 days as handled?')) return; const r = await post('/api/control', { action: 'mark_old_handled', days: 30 }); alert(`${r.count} marked handled`); loadReplies(); loadStatus(); };
+  let html = '';
+  if (d.confirm_stop.length) {
+    html += '<div class="section-title">Confirm do-not-contact</div>' + d.confirm_stop.map(({ client: c }) => `<div class="reply-card" data-id="${esc(c.thread_id)}">
+        <div class="row"><span class="who">${esc(c.name || c.addr)}</span><span class="tag bad">asked to stop?</span><span class="muted">${fmtTs(c.last_reply_ts)}</span></div>
+        <div class="msg">${esc(c.last_reply_excerpt || '')}</div>
+        <div class="row"><button class="btn small danger" data-stop="block">Block address + domain</button><button class="btn small" data-stop="keep">Not a stop — needs review</button><button class="btn small" data-open>Open conversation</button></div>
+      </div>`).join('');
+  }
+  html += `<div class="section-title">Needs your reply (${d.total})</div>`;
+  if (!d.items.length) html += '<div class="empty">Nothing waiting — every reply has been answered or handled.</div>';
+  html += d.items.map(({ client: c, draft }) => {
+    const [lbl, cls] = CAT_LABELS[c.category] || ['', ''];
+    return `<div class="reply-card" data-id="${esc(c.thread_id)}">
+      <div class="row"><span class="who">${esc(c.name || c.addr)}</span>${c.name ? `<span class="muted">${esc(c.addr)}</span>` : ''}<span class="tag ${cls}">${lbl}</span><span class="muted">${fmtTs(c.last_reply_ts)}</span>
+        ${c.platform_url ? `<a href="${esc(c.platform_url)}" target="_blank" class="tag info">program page ↗</a>` : ''}</div>
+      <div class="msg">${esc(c.last_reply_excerpt || '')}</div>
+      <textarea placeholder="Write your answer…">${esc(draft || '')}</textarea>
+      <div class="row"><button class="btn small primary" data-send>Send reply</button>
+        <select data-stage><option value="">keep stage</option>${state.stages.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select>
+        <button class="btn small" data-handle>Mark handled</button><button class="btn small" data-open>Open conversation</button></div>
+    </div>`;
+  }).join('');
+  if ((d.researcher || []).length) html += '<div class="section-title">Replies to researcher@ (answer from that mailbox)</div>' + d.researcher.map(({ client: c }) => {
+    return `<div class="reply-card" data-id="${esc(c.thread_id)}" data-researcher="1">
+      <div class="row"><span class="who">${esc(c.name || c.addr)}</span><span class="tag purple">researcher@</span><span class="muted">${fmtTs(c.researcher_last_ts)}</span></div>
+      <div class="msg">${esc(c.researcher_excerpt || '')}</div>
+      <div class="row"><button class="btn small" data-handle>Mark handled</button><button class="btn small" data-open>Open conversation</button></div></div>`;
+  }).join('');
+  if (d.unmatched.length) html += '<div class="section-title">Unmatched replies (no thread found)</div>' + d.unmatched.map(m => `<div class="item" data-folder="${esc(m.folder)}" data-uid="${m.uid}">
+      <span class="dot"></span><span class="who">${esc(m.from.name || m.from.addr)}</span><span class="when">${fmtDate(m.date)}</span><span class="subj">${esc(m.subject)}</span></div>`).join('');
+  $('#items').innerHTML = html;
+}
+$('#items').addEventListener('click', async e => {
+  const card = e.target.closest('.reply-card');
+  if (card) {
+    const id = card.dataset.id;
+    try {
+      if (e.target.matches('[data-send]')) {
+        const text = $('textarea', card).value.trim(); if (!text) return alert('The reply is empty.');
+        if (!confirm(`Send this reply to ${id.split('|')[0]} now?`)) return;
+        e.target.disabled = true; e.target.textContent = 'Sending…';
+        await post('/api/replies/send', { id, text, stage: $('[data-stage]', card).value });
+        card.remove(); loadStatus();
+      } else if (e.target.matches('[data-handle]')) {
+        await post('/api/replies/handle', { id, stage: $('[data-stage]', card)?.value || '', researcher: !!card.dataset.researcher }); card.remove(); loadStatus();
+      } else if (e.target.matches('[data-stop]')) {
+        await post('/api/clients/confirm_stop', { id, decision: e.target.dataset.stop }); card.remove(); loadStatus();
+      } else if (e.target.matches('[data-open]') || !e.target.closest('textarea, select, button, a')) {
+        openThread(id);
+      }
+    } catch (err) { alert(err.message); if (e.target.matches('[data-send]')) { e.target.disabled = false; e.target.textContent = 'Send reply'; } }
+    return;
+  }
+  const it = e.target.closest('.item'); if (!it) return;
+  if (it.dataset.uid) return openMessage(it.dataset.folder, it.dataset.uid);
+  if (it.dataset.id) { $$('.item.active').forEach(x => x.classList.remove('active')); it.classList.add('active'); openThread(it.dataset.id); }
+});
+
+// ------------------------------------------------------------ pipeline
+async function loadPipeline() {
+  const d = await api('/api/clients', { stage: state.pipe.stage });
+  state.stages = d.stages; state.items = d.items;
+  const counts = d.counts.stages;
+  const chips = [['', 'All', Object.values(counts).reduce((a, v) => a + v.n, 0)], ...d.stages.map(([k, l]) => [k, l, counts[k]?.n || 0])].filter(([k, , n]) => !k || n);
+  head(`<div class="chips">${chips.map(([k, l, n]) => `<span class="chip ${state.pipe.stage === k ? 'on' : ''}" data-stage="${k}">${esc(l)} <b>${fmtN(n)}</b></span>`).join('')}</div>`);
+  $$('#listHead [data-stage]').forEach(c => c.onclick = () => { state.pipe.stage = c.dataset.stage; loadPipeline(); });
+  if (!d.items.length) { $('#items').innerHTML = '<div class="empty">No clients in this stage.</div>'; return; }
+  const lbl = Object.fromEntries(d.stages);
+  $('#items').innerHTML = d.items.map(c => `<div class="item" data-id="${esc(c.thread_id)}">
+      <span class="dot ${PIPE_COLORS[c.stage] || ''}"></span>
+      <span class="who">${esc(c.name || c.addr)}</span><span class="when">${fmtTs(c.last_reply_ts || c.updated_at)}</span>
+      <span class="subj">${c.name ? `<span class="addr">${esc(c.addr)} · </span>` : ''}${esc(c.subject || '')}</span>
+      <span class="meta"><span class="tag ${TAG_OF[PIPE_COLORS[c.stage] || '']}">${esc(lbl[c.stage] || c.stage)}</span>
+        ${c.needs_reply ? '<span class="tag warn">needs reply</span>' : ''}${c.needs_reply_researcher ? '<span class="tag warn">they wrote on researcher@ · your turn</span>' : ''}
+        ${c.report_sent ? `<span class="tag info">${c.report_count > 1 ? c.report_count + ' emails' : 'sample'} from researcher@ · ${esc(c.report_sent_date || '')}</span>` : ''}${c.platform_url ? `<a class="tag info" href="${esc(c.platform_url)}" target="_blank">program page ↗</a>` : ''}</span>
+    </div>`).join('');
+}
+
+// ------------------------------------------------------------ sequence (the three no-reply tabs)
+async function loadSequence() {
+  const s = state.seq;
+  const d = await api('/api/outreach', { days: 0, stage: s.stage, sort: s.sort, q: s.q, limit: 200 });
+  state.items = d.items;
+  const c = d.counts, tab = SEQ_STAGES[s.stage];
+  head(`<div class="chips">${['sent', 'followup1', 'followup2', 'replied', 'bounced'].map(k => `<span class="chip ${s.stage === k ? 'on' : ''}" data-seq="${k}">${SEQ_STAGES[k].label} <b>${fmtN(c[k])}</b></span>`).join('')}</div>
+        <div class="toolbar"><input id="seqQ" placeholder="search client…" value="${esc(s.q)}"><select id="seqSort"><option value="activity">Latest activity</option><option value="waiting">Waiting longest</option><option value="sends">Most emails sent</option><option value="client">Client A–Z</option></select>
+        <a class="btn small" href="/api/outreach.csv?days=0&stage=${s.stage}&sort=${s.sort}" download>⤓ CSV</a></div>
+        <div class="sub">${fmtN(d.total)} clients ${tab.sub} · all time</div>`);
+  $('#seqSort').value = s.sort;
+  $$('#listHead [data-seq]').forEach(ch => ch.onclick = () => { s.stage = ch.dataset.seq; loadSequence(); });
+  $('#seqSort').onchange = e => { s.sort = e.target.value; loadSequence(); };
+  $('#seqQ').onchange = e => { s.q = e.target.value.trim(); loadSequence(); };
+  if (!d.items.length) { $('#items').innerHTML = '<div class="empty">Nothing here.</div>'; return; }
+  $('#items').innerHTML = d.items.map(t => {
+    const tags = [];
+    if (t.stage === 'replied') tags.push(t.turn === 'us' ? `<span class="tag warn">needs your reply · ${ago(t.last_in_ts)}</span>` : `<span class="tag">waiting on them · ${ago(t.last_out_ts)}</span>`);
+    else if (t.due) tags.push(`<span class="tag warn">${t.stage === 'sent' ? '1st' : '2nd'} follow-up due · ${ago(t.last_out_ts)} silent</span>`);
+    else if (t.stage === 'followup2') tags.push(`<span class="tag">dropped · ${ago(t.last_out_ts)} since 2nd follow-up</span>`);
+    else if (t.stage !== 'bounced') tags.push(`<span class="tag">${ago(t.last_out_ts)} since last email</span>`);
+    tags.push(`<span class="tag">${t.sends} sent${t.replies ? ` · ${t.replies} recv` : ''}</span>`);
+    if (t.engaged_at_domain) tags.push('<span class="tag info">company replied elsewhere</span>');
+    return `<div class="item" data-id="${esc(t.id)}"><span class="dot ${t.stage === 'replied' ? 'ok' : t.stage === 'bounced' ? 'bad' : t.stage === 'sent' ? '' : 'warn'}"></span>
+      <span class="who">${esc(t.name || t.addr)}</span><span class="when">${fmtTs(t.last_ts)}</span>
+      <span class="subj">${t.name ? `<span class="addr">${esc(t.addr)} · </span>` : ''}${esc(t.subject)}</span><span class="meta">${tags.join('')}</span></div>`;
+  }).join('') + (d.total > d.items.length ? `<div class="more muted">showing ${d.items.length} of ${fmtN(d.total)} — use search or the CSV export</div>` : '');
+}
+
+// ------------------------------------------------------------ activity
+async function loadActivity() {
+  const d = await api('/api/activity', { limit: 300 });
+  head('<div>What the automation did and saw, newest first</div>');
+  if (!d.items.length) { $('#items').innerHTML = '<div class="empty">No activity yet.</div>'; return; }
+  $('#items').innerHTML = '<div class="log">' + d.items.map(l => `<div class="item lvl-${l.level}" ${l.thread_id ? `data-id="${esc(l.thread_id)}"` : ''}>
+      <span class="ev">${esc(l.event)}</span><span class="subj">${esc(l.message)}</span><span class="when">${fmtTs(l.ts)}</span></div>`).join('') + '</div>';
+}
+
+// ------------------------------------------------------------ settings
+async function loadSettings() {
+  const [s, t, sup] = await Promise.all([api('/api/settings'), api('/api/templates'), api('/api/suppress')]);
+  head('<div>Automation settings, templates and the do-not-contact list</div>');
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const dry = state.status?.dry_run;
+  $('#items').innerHTML = `
+    <div class="card"><h3>Mode</h3>
+      <div class="row">${dry ? '<button class="btn danger" id="goLive">Switch to LIVE sending</button>' : '<button class="btn" id="goDry">Back to dry run</button>'}
+      <button class="btn" id="testMail">Send a test email to me</button></div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="bguard" ${s.bounce_guard ? 'checked' : ''}> Auto-pause if follow-ups start bouncing (recommended)</label>
+      <p class="muted" style="margin:8px 0 0;font-size:12px">Dry run computes and logs every send without emailing anyone. The test email goes to this mailbox itself so you can see how a follow-up looks. A daily database backup is kept in the data volume.</p></div>
+    <div class="card"><h3>Sequence</h3><div class="form">
+      <label>1st follow-up after (days)<input type="number" min="0" id="w1" value="${s.wait_days[0]}"></label>
+      <label>2nd follow-up after (days)<input type="number" min="0" id="w2" value="${s.wait_days[1]}"></label>
+      <label>Daily cap<input type="number" min="0" id="cap" value="${s.daily_cap}"></label>
+      <label>Seconds between emails (min 120)<input type="number" min="120" id="gap" value="${s.min_gap_seconds}"></label>
+      <label>Queue order<select id="order"><option value="newest" ${s.queue_order === 'newest' ? 'selected' : ''}>Newest clients first</option><option value="oldest" ${s.queue_order === 'oldest' ? 'selected' : ''}>Oldest clients first</option></select></label>
+      <label>Only threads started after<input type="date" id="since" value="${esc(s.backlog_since)}"></label>
+      <label>Window start (${esc(s.window.tz)})<input type="time" id="wstart" value="${esc(s.window.start)}"></label>
+      <label>Window end<input type="time" id="wend" value="${esc(s.window.end)}"></label>
+      <div class="wide row">${days.map((d, i) => `<label class="check"><input type="checkbox" data-day="${i}" ${s.window.days.includes(i) ? 'checked' : ''}> ${d}</label>`).join('')}</div>
+      <label>Send from<select id="smode"><option value="initial" ${s.sender_mode === 'initial' ? 'selected' : ''}>Same address as the initial email</option><option value="fixed" ${s.sender_mode === 'fixed' ? 'selected' : ''}>A fixed address</option></select></label>
+      <label>Fixed address<input id="saddr" value="${esc(s.fixed_sender)}" placeholder="ramsha.mirza@vulgone.com"></label>
+      <label>Fixed display name<input id="sname" value="${esc(s.fixed_sender_name)}" placeholder="Ramsha Mirza"></label>
+      <div class="wide"><button class="btn primary" id="saveSettings">Save settings</button></div></div></div>
+    <div class="card"><h3>Templates</h3><div class="form-col">${t.items.map(x => `<label>${esc(x.name)} <span class="muted">(${x.kind === 'followup' ? (x.step === 2 ? 'sent as the 1st follow-up' : 'sent as the 2nd follow-up') : 'reply script'} · placeholders: {company} {name})</span>
+        <textarea data-tpl="${esc(x.id)}">${esc(x.body)}</textarea></label>`).join('')}
+      <div><button class="btn primary" id="saveTpl">Save templates</button></div></div></div>
+    <div class="card"><h3>Do-not-contact list (${sup.items.length}) <a class="btn small" href="/api/suppress.csv" download style="text-decoration:none;margin-left:8px">⤓ Export CSV for the outreach platform</a></h3>
+      <div class="row"><input id="supAddr" placeholder="address or @domain" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)"><input id="supWhy" placeholder="reason" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)"><button class="btn small" id="supAdd">Add</button></div>
+      <div style="margin-top:8px;font-size:13px">${sup.items.map(x => `<div class="row" style="padding:3px 0"><code>${esc(x.addr)}</code><span class="muted">${esc(x.reason || '')}</span><button class="btn small" data-unsup="${esc(x.addr)}">remove</button></div>`).join('')}</div></div>`;
+  $('#saveSettings').onclick = async () => {
+    const body = { wait_days: [+$('#w1').value, +$('#w2').value], daily_cap: +$('#cap').value, min_gap_seconds: +$('#gap').value, queue_order: $('#order').value, bounce_guard: $('#bguard').checked,
+      backlog_since: $('#since').value, window: { days: $$('[data-day]').filter(c => c.checked).map(c => +c.dataset.day), start: $('#wstart').value, end: $('#wend').value, tz: s.window.tz },
+      sender_mode: $('#smode').value, fixed_sender: $('#saddr').value.trim(), fixed_sender_name: $('#sname').value.trim() };
+    try { await put('/api/settings', body); loadStatus(); alert('Saved'); } catch (e) { alert(e.message); }
+  };
+  $('#saveTpl').onclick = async () => { for (const ta of $$('[data-tpl]')) await put('/api/templates', { id: ta.dataset.tpl, body: ta.value }); alert('Templates saved'); };
+  if ($('#goLive')) $('#goLive').onclick = async () => { if (prompt('Follow-ups will really be emailed to clients. Type LIVE to confirm.') !== 'LIVE') return; await post('/api/control', { action: 'go_live', confirm: 'LIVE' }); await loadStatus(); loadSettings(); };
+  if ($('#goDry')) $('#goDry').onclick = async () => { await post('/api/control', { action: 'dry_run' }); await loadStatus(); loadSettings(); };
+  $('#testMail').onclick = async e => { e.target.disabled = true; try { const r = await post('/api/control', { action: 'test_email' }); alert('Sent. Message-ID ' + r.message_id + ' — check the inbox and Sent folder.'); } catch (err) { alert(err.message); } e.target.disabled = false; };
+  $('#supAdd').onclick = async () => { try { await post('/api/suppress', { addr: $('#supAddr').value, reason: $('#supWhy').value }); loadSettings(); } catch (e) { alert(e.message); } };
+  $$('[data-unsup]').forEach(b => b.onclick = async () => { await api('/api/suppress', { addr: b.dataset.unsup }, { method: 'DELETE' }); loadSettings(); });
+}
+
+// ------------------------------------------------------------ mail (plain folder browser)
+async function loadMail() {
+  const f = await api('/api/folders');
+  const d = await api('/api/messages', { folder: state.mail.folder, limit: 50 });
+  head(`<div class="toolbar"><select id="folderSel">${f.folders.map(x => `<option value="${esc(x.name)}" ${x.name === state.mail.folder ? 'selected' : ''}>${esc(x.name)} (${x.unseen ? x.unseen + ' unread / ' : ''}${x.total})</option>`).join('')}</select></div>`);
+  $('#folderSel').onchange = e => { state.mail.folder = e.target.value; loadMail(); };
+  $('#items').innerHTML = d.items.map(m => `<div class="item" data-folder="${esc(m.folder)}" data-uid="${m.uid}"><span class="dot ${m.seen ? '' : 'accent'}"></span>
+      <span class="who">${esc(state.mail.folder.toLowerCase() === 'sent' ? 'To: ' + (m.to[0]?.addr || '') : (m.from.name || m.from.addr))}</span><span class="when">${fmtDate(m.date)}</span><span class="subj">${esc(m.subject)}</span></div>`).join('') || '<div class="empty">Empty folder.</div>';
+}
+
+// ------------------------------------------------------------ reader: thread + client editor
+const addrLine = list => list.map(a => a.name ? `${esc(a.name)} &lt;${esc(a.addr)}&gt;` : esc(a.addr)).join(', ');
+function iframeDoc(html) {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><base target="_blank">
+    <style>body{font:14px/1.5 system-ui,sans-serif;color:#1b1f24;margin:16px 20px;overflow-wrap:anywhere}img{max-width:100%;height:auto}</style></head><body>${html}</body></html>`;
+}
+function makeFrame(html) { const f = document.createElement('iframe'); f.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox'); f.srcdoc = iframeDoc(html); return f; }
+const person = a => a ? (a.name || a.addr) : '';
+const opts = (values, current) => values.map(v => `<option value="${v}" ${(current || '') === v ? 'selected' : ''}>${v || '—'}</option>`).join('');
+
+async function openThread(id) {
+  state.selected = id; document.body.classList.add('reading');
+  const reader = $('#reader'); reader.innerHTML = '<div class="loading">Opening…</div>';
+  let d; try { d = await api('/api/thread', { id }); } catch (e) { reader.innerHTML = `<div class="error">${esc(e.message)}</div>`; return; }
+  if (state.selected !== id) return;
+  const t = d.thread, c = d.client;
+  const stageTag = { sent: ['No reply to initial email', ''], followup1: ['1st follow-up sent · no reply', 'warn'], followup2: ['2nd follow-up sent · dropped', 'purple'], replied: ['Replied', 'ok'], bounced: ['Bounced', 'bad'] }[t.stage] || [t.stage, ''];
+  const steps = ['Initial email', '1st follow-up', '2nd follow-up'].map((l, i) => `<span class="step ${t.stage === 'bounced' && i === 0 ? 'bad' : i < t.steps ? (t.stage === 'replied' ? 'ok' : 'done') : ''}" title="${l}"></span>`).join('');
+  const kindTag = m => (m.account === 'researcher' ? '<span class="tag purple">researcher@</span>' : '') + (m.kind === 'bounce' ? '<span class="tag bad">bounce</span>' : m.kind === 'auto' ? '<span class="tag purple">auto-reply</span>' : m.source === 'follower' ? '<span class="tag info">by follower</span>' : m.source === 'platform' && m.dir === 'out' ? '<span class="tag">platform</span>' : '');
+  const allMsgs = [...t.msgs, ...(t.researcher || [])].sort((a, b) => a.ts - b.ts);
+  const stagesOpts = state.stages.map(([k, l]) => `<option value="${k}" ${c?.stage === k ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  reader.innerHTML = `
+    <div class="r-head">
+      <h2>${esc(t.name || t.addr)}</h2>
+      <dl class="r-meta">
+        <dt>Client</dt><dd>${esc(t.addr)}${t.engaged_at_domain ? ' <span class="tag info">company replied elsewhere</span>' : ''}</dd>
+        <dt>Thread</dt><dd>${esc(t.subject)}</dd>
+        <dt>Sequence</dt><dd><span class="tag ${stageTag[1]}">${stageTag[0]}</span> ${t.due ? `<span class="tag warn">${t.stage === 'sent' ? '1st' : '2nd'} follow-up due</span>` : ''}</dd>
+        <dt>Emails</dt><dd>${t.sends} sent · ${t.received} received${t.replies !== t.received ? ` (${t.replies} real)` : ''} · last ${ago(t.last_ts)} ago</dd>
+        ${t.report_sent_ts ? `<dt>Sample</dt><dd><span class="tag info">${t.report_count} email${t.report_count > 1 ? 's' : ''} from researcher@</span> first on ${fmtTs(t.report_sent_ts)}</dd>` : ''}
+        <dt>Sent from</dt><dd>${esc(t.initial_from ? (t.initial_from.name ? t.initial_from.name + ' <' + t.initial_from.addr + '>' : t.initial_from.addr) : '—')} · ${esc(t.initial_source)}</dd>
+      </dl>
+      <div class="timeline"><span class="lbl">Sequence</span>${steps}<span class="lbl">${Math.min(t.steps, 3)}/3</span></div>
+      <div class="r-actions"><button class="btn back" id="back">← Back</button>
+        <a class="btn" href="mailto:${esc(t.addr)}?subject=${encodeURIComponent('Re: ' + t.subject.replace(/^re:\s*/i, ''))}">Write in mail app</a>
+        <button class="btn" id="expandAll">Expand all</button>${c ? '' : '<button class="btn" id="addClient">Add to pipeline</button>'}</div>
+    </div>
+    <div class="card" id="clientCard" ${c ? '' : 'hidden'}><h3>Pipeline</h3><div class="form">
+      <label>Stage<select id="cStage">${stagesOpts}</select></label>
+      <label>Their program / report page<input id="cUrl" value="${esc(c?.platform_url || '')}" placeholder="https://…"></label>
+      <label class="check" style="align-self:end"><input type="checkbox" id="cDnc" ${c?.do_not_contact ? 'checked' : ''}> Do not contact</label>
+      ${c?.report_sent ? `<div class="muted" style="align-self:end;font-size:12px">Sample sent ${esc(c.report_sent_date || '')} · ${c.report_count} email${c.report_count > 1 ? 's' : ''} from researcher@</div>` : ''}
+      ${c?.researcher_excerpt ? `<label class="wide">Last from them on researcher@ (${fmtTs(c.researcher_last_ts)})<div class="msg" style="background:var(--panel-2);border-radius:8px;padding:8px 10px;font-size:13px">${esc(c.researcher_excerpt)}</div></label>` : ''}
+      <label class="wide">Notes<textarea id="cNotes" style="min-height:70px">${esc(c?.notes || '')}</textarea></label>
+      <div class="wide row"><button class="btn primary" id="saveClient">Save</button><span class="muted" id="saveMsg"></span></div></div></div>
+    <div class="thread" id="thread">${allMsgs.map((m, i) => `<div class="tmsg ${m.dir} ${m.kind}" data-mi="${i}">
+        <div class="thead"><span class="arrow">${m.dir === 'out' ? '→' : '←'}</span>
+          <span class="tw">${m.dir === 'out' ? `To ${esc(person(m.who))}` : `From ${esc(person(m.who))}`} <small>· ${esc(m.subject)}</small></span>
+          ${kindTag(m)}${m.has_attachments ? '<span class="tag">📎</span>' : ''}<span class="td">${fmtDate(m.date)}</span></div>
+        <div class="tbody" hidden></div></div>`).join('')}</div>`;
+  $('#back').onclick = () => document.body.classList.remove('reading');
+  if ($('#addClient')) $('#addClient').onclick = () => { $('#clientCard').hidden = false; $('#addClient').remove(); };
+  $('#saveClient').onclick = async () => {
+    const body = { id, stage: $('#cStage').value, platform_url: $('#cUrl').value.trim(), do_not_contact: $('#cDnc').checked ? 1 : 0, notes: $('#cNotes').value };
+    try { await post('/api/clients/update', body); $('#saveMsg').textContent = 'saved'; loadStatus(); if (state.tab === 'pipeline') loadPipeline(); } catch (e) { alert(e.message); }
+  };
+  const thread = $('#thread');
+  const toggle = async (card, force) => {
+    const body = $('.tbody', card); const open = force ?? body.hidden;
+    if (!open) { body.hidden = true; return; }
+    body.hidden = false; if (body.dataset.loaded) return; body.dataset.loaded = '1';
+    body.innerHTML = '<div class="loading">Loading…</div>';
+    const m = allMsgs[+card.dataset.mi];
+    try {
+      const msg = await api('/api/message', { folder: m.folder, uid: m.uid, account: m.account || '' });
+      const base = `folder=${encodeURIComponent(msg.folder)}&uid=${msg.uid}${m.account ? '&account=' + m.account : ''}`;
+      body.innerHTML = '';
+      if (msg.text) body.innerHTML = `<pre>${esc(msg.text.trim())}</pre>`; else if (msg.html) body.appendChild(makeFrame(msg.html)); else body.innerHTML = '<pre>(empty message)</pre>';
+      const foot = document.createElement('div'); foot.className = 'tfoot';
+      foot.innerHTML = msg.attachments.filter(a => !a.inline).map(a => `<a class="btn" href="/api/attachment?${base}&idx=${a.idx}">📎 ${esc(a.filename)}</a>`).join('') + (msg.html && msg.text ? '<button class="btn" data-html>View as HTML</button>' : '') + `<a class="btn" href="/api/raw?${base}">.eml</a>`;
+      body.appendChild(foot);
+      const hb = $('[data-html]', foot); if (hb) hb.onclick = () => { body.querySelector('pre')?.replaceWith(makeFrame(msg.html)); hb.remove(); };
+    } catch (e) { body.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
+  };
+  thread.addEventListener('click', e => { const h = e.target.closest('.thead'); if (h) toggle(h.parentElement); });
+  $('#expandAll').onclick = () => $$('.tmsg', thread).forEach(card => toggle(card, true));
+  const last = thread.querySelector('.tmsg:last-child'); if (last) toggle(last, true);
+}
+
+async function openMessage(folder, uid) {
+  state.selected = `${folder}#${uid}`; document.body.classList.add('reading');
+  const reader = $('#reader'); reader.innerHTML = '<div class="loading">Opening…</div>';
+  let d; try { d = await api('/api/message', { folder, uid }); } catch (e) { reader.innerHTML = `<div class="error">${esc(e.message)}</div>`; return; }
+  reader.innerHTML = `<div class="r-head"><h2>${esc(d.subject)}</h2><dl class="r-meta"><dt>From</dt><dd>${addrLine(d.from)}</dd><dt>To</dt><dd>${addrLine(d.to) || '—'}</dd><dt>Date</dt><dd>${esc(d.date)}</dd><dt>Folder</dt><dd>${esc(d.folder)}</dd></dl>
+    <div class="r-actions"><button class="btn back" id="back">← Back</button><a class="btn" href="/api/raw?folder=${encodeURIComponent(d.folder)}&uid=${d.uid}">Download .eml</a><a class="btn" href="mailto:${esc(d.from[0]?.addr || '')}">Reply in mail app</a></div></div><div class="thread" id="mbody"></div>`;
+  $('#back').onclick = () => document.body.classList.remove('reading');
+  const box = $('#mbody'); if (d.text) box.innerHTML = `<pre style="white-space:pre-wrap">${esc(d.text)}</pre>`; else if (d.html) box.appendChild(makeFrame(d.html));
+}
+
+// ------------------------------------------------------------ boot
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, select, textarea')) return;
+  if (e.key === 'j' || e.key === 'k') {
+    const ids = state.items.map(x => x.id || x.thread_id).filter(Boolean);
+    const cur = ids.indexOf(state.selected);
+    const next = ids[Math.max(0, Math.min(ids.length - 1, cur + (e.key === 'j' ? 1 : -1)))];
+    if (next) { openThread(next); $$('.item').forEach(el => el.classList.toggle('active', el.dataset.id === next)); }
+  }
+});
+(async () => {
+  try { state.stages = (await api('/api/clients', { stage: 'none' })).stages; } catch (e) { /* non-fatal */ }
+  await loadStatus();
+  const tab = location.hash.slice(1).split('?')[0];
+  setTab(['queue', 'replies', 'pipeline', 'sequence', 'activity', 'settings', 'mail'].includes(tab) ? tab : 'queue');
+  setInterval(loadStatus, 10000);
+  setInterval(() => { if (['queue', 'replies', 'pipeline', 'activity'].includes(state.tab) && !document.body.classList.contains('reading')) loadTab(); }, 60000);
+})();
+</script>
+</body>
+</html>

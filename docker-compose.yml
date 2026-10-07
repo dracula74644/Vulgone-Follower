@@ -1,0 +1,20 @@
+services:
+  vulgone-follower:
+    build: .
+    image: vulgone-follower:latest
+    container_name: vulgone-follower
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      CACHE_DIR: /data/cache
+      AUTOMATION: "1"
+    ports:
+      # Published on localhost only: the portal has no login of its own.
+      - "127.0.0.1:${HOST_PORT:-5055}:5055"
+    volumes:
+      # Header cache, SQLite state (settings, sends log, pipeline) — survives rebuilds.
+      - follower-data:/data
+    restart: unless-stopped
+
+volumes:
+  follower-data:

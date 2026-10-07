@@ -1,0 +1,14 @@
+.env
+cache/
+data/
+__pycache__/
+*.pyc
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+.dockerignore
+startup.sh
+README.md
+tests/
+.pytest_cache/
